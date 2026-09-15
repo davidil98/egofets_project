@@ -1,0 +1,4 @@
+Wafer Dippers in many sizes by dimolina on Thingiverse: https://www.thingiverse.com/thing:7142829
+
+Summary:
+I'm a phD student and I work in nano and microfabrication. These dippers are very helpful to dip in chips or something in chemical fluids, mainly when the time of the dive is required. I printed all models with an Enders 3 v3 SE model using PP (polypropylene) filament. Print with PP filament is VERY hard, and I needed several tests to succeed eventually. For adhesion and to prevent warping, I used B700 glue. If you have a closed printer, maybe PP tape without glue is sufficient. Printing Settings:Printer Model: Creality Enders 3 v3 SEFilament: PPQuality: 0.2mmInfill: 40%Printing Temperature: 235 ºCPlate Temperature: 0 ºCPlate Temperature at Initial Layer: 100ºCFlow: 110%Printing Speed: 40 mm/sCooling: NoSupport: NoBuild Plate Adhesion: BrimAny questions, please send a comment!
