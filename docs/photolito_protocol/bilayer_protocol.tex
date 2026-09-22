@@ -47,7 +47,7 @@
 }
 \author{
     e-MolMat Group -- ICMAB-CSIC \\
-    \texttt{Protocol v1.0 -- \today}
+    \texttt{Protocol v1.1 -- \today}
 }
 \date{}
 
@@ -185,17 +185,32 @@ The bilayer lift-off process consists of eight major steps:
 
 \begin{enumerate}[label=\alph*)]
     \item Cut Kapton foil to \SI{8}{\cm} $\times$ \SI{8}{\cm} pieces.
+          Allow cut pieces to flatten on a clean surface for 2--3 days
+          before use to avoid ridges.
     \item Clean the Kapton substrate:
     \begin{enumerate}[label=\roman*)]
         \item Rinse with acetone
         \item Rinse with isopropanol
         \item Dry thoroughly with N$_2$ gun (front and back)
     \end{enumerate}
-    \item Mount the Kapton on a clean Si carrier wafer using Kapton
-          adhesive tape strips at the edges. Leave gaps between
-          strips so air can escape during evaporation.
+    \item Mount the Kapton on a clean Si carrier wafer using the
+          \textbf{IPA capillary method}:
+    \begin{enumerate}[label=\roman*)]
+        \item Place the first Kapton tape strip on one edge of the foil.
+        \item Dispense a small drop of IPA between the Kapton foil and the
+              Si carrier. The IPA wicks by capillarity, pulling the foil
+              flat against the carrier.
+        \item Press gently to adhere.
+        \item Apply tape on the opposite edge, pulling the foil taut
+              without stretching.
+        \item Apply tape on the remaining two edges.
+        \item Leave \textbf{small gaps} between tape strips for air
+              evacuation during evaporation.
+    \end{enumerate}
     \item Ensure both Kapton and carrier are \textbf{completely dry} ---
           trapped humidity at the interface ruins exposure and evaporation.
+          Verify flatness by visual inspection: no wrinkles, no bubbles,
+          no lifting corners.
 \end{enumerate}
 
 \begin{warningbox}[Important]
@@ -425,12 +440,22 @@ DMSO is preferred over acetone for the following reasons:
 \subsection{Post-Lift-Off Cleaning}
 
 \begin{enumerate}[label=\alph*)]
-    \item Rinse with IPA: 2 baths $\times$ \SI{15}{\min} each,
-          fresh IPA per bath.
+    \item Rinse with IPA: \textbf{3 baths} $\times$ \SI{15}{\min} each,
+          fresh IPA per bath. The additional bath ensures thorough removal
+          of DMSO residues from the gold surface.
     \item Dry with N$_2$ gun.
     \item Inspect under microscope: verify clean channels with no
           residual gold.
 \end{enumerate}
+
+\begin{warningbox}[DMSO--Au Surface Interaction]
+DMSO coordinates to gold surfaces through its sulfur atom (S--O $\to$ Au),
+forming molecular complexes that can modify the Au work function and
+interfere with subsequent SAM formation. The triple IPA rinse followed by
+the UV-ozone treatment (\SI{25}{\min}) in the SAM preparation step
+effectively removes these organic residues and restores the Au surface.
+\textbf{Always perform SAM immediately after UV-ozone activation.}
+\end{warningbox}
 
 \begin{tipbox}[Expected Result]
 After successful lift-off, gold should be present \textbf{only} in the
@@ -469,6 +494,10 @@ Poor SAM formation & Au surface contaminated & Perform UV-ozone
 \midrule
 PMGI not adhering to Kapton & Surface contamination & Ensure dehydration
     bake at \SI{200}{\celsius}/\SI{5}{\min} before PMGI coating. \\
+\midrule
+Ridges/hills in Au film & Kapton not flat on carrier & Use IPA capillary
+    method for mounting (Section~3.1). Ensure foil is pre-flattened for
+    2--3 days. Verify no wrinkles before coating. \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -490,10 +519,12 @@ Sidewall profile & Vertical & Undercut (re-entrant) \\
 Lift-off solvent & Acetone + ultrasonido & DMSO at \SI{60}{\celsius} \\
 Lift-off time & $3 \times \SI{15}{\min}$ + IPA baths &
     \SIrange{2}{3}{\hour} passive \\
-Cotton swab needed & Yes (frequently) & \textbf{No} \\
+IPA rinse baths & 2 $\times$ \SI{15}{\min} & 3 $\times$ \SI{15}{\min} \\
+Cotton swab needed & Yes (frequently) & \textbf{Rarely} ($<$42\%) \\
 Pattern damage risk & High & \textbf{Low} \\
 Developer & MF-319 & MF-319 (same) \\
 Exposure tool & Microwriter ML3 & Microwriter ML3 (same) \\
+Kapton mounting & Tape strips & IPA capillary method \\
 Additional equipment & None & Hotplate capable of \SI{170}{\celsius} \\
 New chemicals & None & DMSO only \\
 \bottomrule
