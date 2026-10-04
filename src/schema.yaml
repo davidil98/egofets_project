@@ -1,0 +1,100 @@
+# Schema definition for EGOFET Memory Database
+# Location: data/memories.db
+
+tables:
+  memories:
+    description: "Main table for experiments and comparisons"
+    columns:
+      id: INTEGER PRIMARY KEY AUTOINCREMENT
+      title: TEXT NOT NULL
+      type: TEXT NOT NULL DEFAULT 'experiment'  # experiment | comparison
+      subtype: TEXT  # device | batch | wafer | session (only for type=experiment)
+      date: TEXT NOT NULL  # YYYY-MM-DD
+      description: TEXT DEFAULT ''
+      substrate: TEXT DEFAULT ''  # Kapton, Si/SiO2, Glass, etc.
+      process: TEXT DEFAULT ''  # BAMS, spin-coating, etc.
+      created_at: TEXT NOT NULL
+      template_id: INTEGER REFERENCES templates(id)
+  
+  memory_fields:
+    description: "Custom fields for memories"
+    columns:
+      id: INTEGER PRIMARY KEY AUTOINCREMENT
+      memory_id: INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE
+      field_name: TEXT NOT NULL
+      field_value: TEXT DEFAULT ''
+      field_type: TEXT NOT NULL DEFAULT 'custom'  # base | custom
+  
+  memory_references:
+    description: "References to external files (HDF5, photos, CSVs, figures)"
+    columns:
+      id: INTEGER PRIMARY KEY AUTOINCREMENT
+      memory_id: INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE
+      ref_type: TEXT NOT NULL  # hdf5 | photo | csv | figure
+      ref_path: TEXT NOT NULL  # relative to project root
+      metadata_json: TEXT DEFAULT '{}'
+  
+  analysis_results:
+    description: "Results from analysis functions"
+    columns:
+      id: INTEGER PRIMARY KEY AUTOINCREMENT
+      memory_id: INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE
+      function_name: TEXT NOT NULL
+      params_json: TEXT DEFAULT '{}'
+      results_csv_path: TEXT  # relative path to CSV in data/processed/
+      created_at: TEXT NOT NULL
+  
+  templates:
+    description: "Predefined field structures for different experiment types"
+    columns:
+      id: INTEGER PRIMARY KEY AUTOINCREMENT
+      name: TEXT NOT NULL UNIQUE
+      description: TEXT DEFAULT ''
+      fields_json: TEXT DEFAULT '{}'  # JSON: [{"name": "field", "type": "text", "default": "value"}]
+
+# Default templates
+default_templates:
+  - name: "kapton_batch"
+    description: "Kapton substrate batch with standard parameters"
+    fields:
+      - name: "thickness"
+        type: "text"
+        default: "125um"
+      - name: "SAM_concentration"
+        type: "text"
+        default: "1mM"
+      - name: "OSC_blend_ratio"
+        type: "text"
+        default: "4:1"
+      - name: "bar_number"
+        type: "integer"
+        default: 3
+      - name: "temperature_C"
+        type: "integer"
+        default: 105
+  
+  - name: "single_device"
+    description: "Individual device measurement"
+    fields:
+      - name: "device_label"
+        type: "text"
+        default: ""
+      - name: "channel_W_um"
+        type: "float"
+        default: 10000.0
+      - name: "channel_L_um"
+        type: "float"
+        default: 20.0
+      - name: "measurement_types"
+        type: "text"
+        default: "transfer,output"
+  
+  - name: "comparison_study"
+    description: "Comparison between multiple experiments"
+    fields:
+      - name: "comparison_criteria"
+        type: "text"
+        default: ""
+      - name: "n_experiments"
+        type: "integer"
+        default: 0

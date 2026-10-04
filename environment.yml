@@ -15,4 +15,7 @@ dependencies:
   - pip
   - python-docx
   - pymupdf
-  - streamlit
+  - nicegui>=1.4.0
+  - plotly>=5.18.0
+  - weasyprint>=60.0
+  - jinja2>=3.1.0

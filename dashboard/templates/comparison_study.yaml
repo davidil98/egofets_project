@@ -1,0 +1,11 @@
+name: comparison_study
+description: "Comparison between multiple experiments"
+fields:
+  - name: comparison_criteria
+    type: text
+    default: ""
+    required: false
+  - name: n_experiments
+    type: integer
+    default: 0
+    required: false

@@ -1,0 +1,19 @@
+name: single_device
+description: "Individual device measurement"
+fields:
+  - name: device_label
+    type: text
+    default: ""
+    required: false
+  - name: channel_w_um
+    type: float
+    default: 10000.0
+    required: false
+  - name: channel_l_um
+    type: float
+    default: 20.0
+    required: false
+  - name: measurement_types
+    type: text
+    default: "transfer,output"
+    required: false

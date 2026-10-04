@@ -1,0 +1,23 @@
+name: kapton_batch
+description: "Kapton substrate batch with standard parameters"
+fields:
+  - name: thickness
+    type: text
+    default: "125um"
+    required: false
+  - name: sam_concentration
+    type: text
+    default: "1mM"
+    required: false
+  - name: osc_blend_ratio
+    type: text
+    default: "4:1"
+    required: false
+  - name: bar_number
+    type: integer
+    default: 3
+    required: false
+  - name: temperature_c
+    type: integer
+    default: 105
+    required: false
