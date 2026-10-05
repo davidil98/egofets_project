@@ -28,7 +28,7 @@ def render_memory_detail(memory_id: int, on_back):
         container.clear()
         mem = db.get_memory(memory_id)
         with container:
-            _render_header(mem, on_back)
+            _render_header(mem, on_back, refresh)
             with ui.row().classes("w-full gap-4 items-start"):
                 with ui.column().classes("flex-1 gap-4"):
                     _render_metadata_card(mem, refresh)
@@ -42,7 +42,7 @@ def render_memory_detail(memory_id: int, on_back):
     refresh()
 
 
-def _render_header(memory: dict, on_back):
+def _render_header(memory: dict, on_back, refresh):
     with ui.card().classes("w-full"):
         with ui.row().classes("w-full items-center gap-3"):
             ui.button(icon="arrow_back", on_click=on_back).props("flat round")
@@ -53,6 +53,61 @@ def _render_header(memory: dict, on_back):
                     if memory.get("subtype"):
                         ui.badge(memory["subtype"]).props("color=gray outline")
                     ui.label(memory.get("date", "")).classes("text-sm text-gray-500")
+            ui.button("Export", icon="download", on_click=lambda: _show_export_dialog(memory["id"], refresh)).props("color=secondary")
+
+
+def _show_export_dialog(memory_id: int, refresh):
+    """Show export dialog with options."""
+    with ui.dialog() as dlg, ui.card().classes("w-96"):
+        ui.label("Export Memory").classes("text-xl font-bold mb-4")
+        
+        format_select = ui.select(
+            ["HTML", "PDF"],
+            value="HTML",
+            label="Format",
+        ).props("outlined dense").classes("w-full")
+        
+        include_figures = ui.checkbox("Include figures", value=True)
+        include_photos = ui.checkbox("Include photos", value=True)
+        
+        status_label = ui.label("").classes("text-sm text-gray-500 mt-2")
+        
+        with ui.row().classes("w-full justify-end mt-4 gap-2"):
+            ui.button("Cancel", on_click=dlg.close).props("flat")
+            
+            async def do_export():
+                status_label.text = "Exporting..."
+                try:
+                    if format_select.value == "HTML":
+                        from dashboard.exporters.html import export_memory_html
+                        path = export_memory_html(
+                            memory_id=memory_id,
+                            include_figures=include_figures.value,
+                            include_photos=include_photos.value,
+                        )
+                    else:
+                        from dashboard.exporters.pdf import export_memory_pdf
+                        path = export_memory_pdf(
+                            memory_id=memory_id,
+                            include_figures=include_figures.value,
+                            include_photos=include_photos.value,
+                        )
+                    
+                    if path:
+                        status_label.text = f"✓ Exported to: {path.name}"
+                        status_label.classes("text-green-600")
+                        ui.notify(f"Exported to {path.name}", color="positive")
+                        ui.timer(2.0, dlg.close, once=True)
+                    else:
+                        status_label.text = "✗ Export failed"
+                        status_label.classes("text-red-600")
+                except Exception as e:
+                    status_label.text = f"✗ Error: {e}"
+                    status_label.classes("text-red-600")
+            
+            ui.button("Export", icon="check", on_click=do_export).props("color=primary")
+    
+    dlg.open()
 
 
 def _render_metadata_card(memory: dict, refresh):
