@@ -1,0 +1,74 @@
+.nicegui-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    height: 64px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #1a56db;
+}
+
+.menu-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.dropdown-container {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-button {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1rem;
+}
+
+.dropdown-button:hover {
+    color: #ffffff;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: #ffffff;
+    min-width: 200px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    z-index: 1000;
+}
+
+.dropdown-container:hover .dropdown-content {
+    display: block;
+}
+
+.dropdown-link {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: #475569;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.dropdown-link:hover {
+    background-color: #f1f5f9;
+    color: #1a56db;
+}
+
+.menu-link {
+    padding: 0.5rem 1rem;
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
+}
+
+.menu-link:hover {
+    color: #ffffff;
+}

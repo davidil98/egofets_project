@@ -1,0 +1,15 @@
+default:
+  sidebar_width: 350
+  sidebar_height: 500
+  cards_per_row: 3
+  card_height: 450
+/memories/home:
+  sidebar_width: 400
+  sidebar_height: 600
+  cards_per_row: 3
+  card_height: 400
+/memories/detail:
+  sidebar_width: 300
+  sidebar_height: 400
+  cards_per_row: 2
+  card_height: 350

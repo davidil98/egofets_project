@@ -1,0 +1,29 @@
+body {
+    --q-primary: #1a56db !important;
+    --q-secondary: #059669 !important;
+}
+
+.q-page {
+    background-color: #f8fafc;
+}
+
+.nicegui-drawer {
+    background-color: #ffffff;
+    border-right: 1px solid #e2e8f0;
+}
+
+.drawer-resizer {
+    width: 3px;
+    height: 100%;
+    position: absolute;
+    right: 0;
+    top: 0;
+    cursor: col-resize;
+    z-index: 1000;
+    background-color: rgba(0, 0, 0, 0.05);
+    transition: background-color 0.2s ease;
+}
+
+.drawer-resizer:hover {
+    background-color: rgba(26, 86, 219, 0.3);
+}
