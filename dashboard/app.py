@@ -12,12 +12,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from nicegui import ui, app
 from src import db
-from dashboard.templates.memory import sync_templates, list_templates
+from dashboard.config import dashboard_conf
 
 
 def _init():
     db.init_db()
-    sync_templates()
 
 
 class AppState:
@@ -46,16 +45,25 @@ def _build_layout():
                 ui.button("Home", icon="home", on_click=_go_home).props("flat color=white size=sm")
                 ui.button("Compare", icon="compare_arrows", on_click=_go_compare).props("flat color=white size=sm")
                 ui.button("Settings", icon="settings", on_click=_go_settings).props("flat color=white size=sm")
+                ui.button(icon="tune", on_click=_open_display_config).props("flat color=white size=sm").tooltip(
+                    "Display config"
+                )
+
+    if state.current_view == "memory_detail":
+        _render_memory_detail()
+        return
 
     with ui.column().classes("w-full max-w-7xl mx-auto p-4"):
         if state.current_view == "home":
             _render_home()
-        elif state.current_view == "memory_detail":
-            _render_memory_detail()
         elif state.current_view == "compare":
             _render_compare()
         elif state.current_view == "settings":
             _render_settings()
+
+
+def _open_display_config():
+    dashboard_conf.open_settings_dialog(scope="memory_detail", on_save=lambda: ui.navigate.to("/"))
 
 
 def _go_home():

@@ -15,12 +15,14 @@ from jinja2 import Environment, FileSystemLoader
 from PIL import Image
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
 from src import db
 
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+TEMPLATES_DIR = Path(__file__).resolve().parent
 
 
 def _image_to_base64(image_path: Path) -> Optional[str]:
@@ -126,9 +128,7 @@ def export_memory_html(
         print(f"Error: Memory {memory_id} not found")
         return None
     
-    # Separate fields
-    base_fields = [f for f in memory['fields'] if f['field_type'] == 'base']
-    custom_fields = [f for f in memory['fields'] if f['field_type'] == 'custom']
+    fields = memory['fields']
     
     # Process references
     figures = []
@@ -161,8 +161,7 @@ def export_memory_html(
     
     html_content = template.render(
         memory=memory,
-        base_fields=base_fields,
-        custom_fields=custom_fields,
+        fields=fields,
         references=memory['references'],
         analysis_results=memory['analysis_results'],
         figures=figures,

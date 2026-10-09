@@ -235,25 +235,11 @@
         {% endif %}
     </header>
     
-    {% if base_fields %}
+    {% if fields %}
     <section>
-        <h2>Campos Base</h2>
+        <h2>Campos</h2>
         <div class="field-grid">
-            {% for field in base_fields %}
-            <div class="field-card">
-                <div class="field-label">{{ field.field_name }}</div>
-                <div class="field-value">{{ field.field_value }}</div>
-            </div>
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-    
-    {% if custom_fields %}
-    <section>
-        <h2>Campos Personalizados</h2>
-        <div class="field-grid">
-            {% for field in custom_fields %}
+            {% for field in fields %}
             <div class="field-card">
                 <div class="field-label">{{ field.field_name }}</div>
                 <div class="field-value">{{ field.field_value }}</div>

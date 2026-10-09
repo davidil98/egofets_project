@@ -1,28 +1,26 @@
 """Memory creation dialog."""
 
-import json
 from nicegui import ui
 from src import db
-from dashboard.templates.memory import list_templates, apply_template_defaults
+from dashboard.templates.memory import apply_template_defaults, load_templates
 
 
 def show_create_dialog(on_created):
     """Show dialog for creating a new memory."""
 
-    templates = list_templates()
-    template_options = {"none": "No template"} | {str(t["id"]): t["name"] for t in templates}
+    template_options = {"": "No template"} | {t["name"]: t["name"] for t in load_templates()}
+    field_inputs: dict[str, ui.input] = {}
 
-    with ui.dialog() as dlg, ui.card().classes("w-[600px]"):
+    with ui.dialog() as dlg, ui.card().classes("w-[600px] max-h-[90vh] overflow-auto"):
         ui.label("Create New Memory").classes("text-xl font-bold mb-4")
 
         template_select = ui.select(
             template_options,
-            value="none",
-            label="Template",
+            value="",
+            label="Pre-fill from template",
         ).props("outlined dense").classes("w-full")
 
         ui.separator().classes("my-2")
-        ui.label("Base Fields").classes("text-sm font-medium text-gray-600")
 
         title_input = ui.input("Title *").props("outlined dense").classes("w-full")
         type_select = ui.select(
@@ -42,30 +40,32 @@ def show_create_dialog(on_created):
         process_input = ui.input("Process").props("outlined dense").classes("w-full")
 
         ui.separator().classes("my-2")
-        ui.label("Custom Fields (from template)").classes("text-sm font-medium text-gray-600")
+        ui.label("Fields").classes("text-sm font-medium text-gray-600")
 
-        custom_fields_container = ui.column().classes("w-full gap-2")
+        fields_container = ui.column().classes("w-full gap-2")
 
         def apply_template():
-            custom_fields_container.clear()
-            tmpl_id = template_select.value
-            if tmpl_id == "none":
-                return
-
-            defaults = apply_template_defaults(int(tmpl_id))
-            with custom_fields_container:
+            fields_container.clear()
+            field_inputs.clear()
+            defaults = apply_template_defaults(template_select.value or "")
+            with fields_container:
+                if not defaults:
+                    ui.label("No fields yet. Pick a template to pre-fill them.").classes(
+                        "text-sm text-gray-400 italic"
+                    )
                 for name, value in defaults.items():
                     with ui.row().classes("w-full items-center gap-2"):
                         ui.label(name).classes("w-40 text-sm font-medium")
-                        ui.input(value=str(value)).props("outlined dense").classes("flex-1").mark(f"field_{name}")
+                        field_inputs[name] = ui.input(value=str(value)).props("outlined dense").classes("flex-1")
 
         template_select.on_value_change(lambda _: apply_template())
+        apply_template()
 
         with ui.row().classes("w-full justify-end mt-4"):
             ui.button("Cancel", on_click=dlg.close).props("flat")
             ui.button("Create", icon="check", on_click=lambda: _do_create(
                 dlg, title_input, type_select, subtype_select, date_input,
-                desc_input, substrate_input, process_input, custom_fields_container,
+                desc_input, substrate_input, process_input, field_inputs,
                 on_created,
             )).props("color=primary")
 
@@ -73,7 +73,7 @@ def show_create_dialog(on_created):
 
 
 def _do_create(dlg, title_input, type_select, subtype_select, date_input,
-               desc_input, substrate_input, process_input, custom_fields_container,
+               desc_input, substrate_input, process_input, field_inputs,
                on_created):
     if not title_input.value:
         ui.notify("Title is required", color="negative")
@@ -82,15 +82,7 @@ def _do_create(dlg, title_input, type_select, subtype_select, date_input,
         ui.notify("Date is required", color="negative")
         return
 
-    custom_fields = {}
-    for child in custom_fields_container:
-        if hasattr(child, "content"):
-            for sub in child.content:
-                if hasattr(sub, "_markers"):
-                    for marker in sub._markers:
-                        if marker.startswith("field_"):
-                            field_name = marker[6:]
-                            custom_fields[field_name] = sub.value
+    custom_fields = {name: (widget.value or "") for name, widget in field_inputs.items()}
 
     memory_id = db.create_memory(
         title=title_input.value,

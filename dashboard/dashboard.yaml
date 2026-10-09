@@ -1,0 +1,28 @@
+default:
+  theme: light
+  cards_per_row: 2
+  card_height: 380
+  card_fullscreen: true
+memory_detail:
+  sections:
+    metadata: true
+    description: true
+    fields: true
+    references: true
+    analysis: true
+    figures: true
+    photos: true
+  card_order:
+  - metadata
+  - description
+  - fields
+  - references
+  - analysis
+  - figures
+  - photos
+  figures:
+    max_height: 350
+    show_table: true
+  photos:
+    thumb_size: 160
+    columns: 4

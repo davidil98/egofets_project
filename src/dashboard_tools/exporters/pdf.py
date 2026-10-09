@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from .html import export_memory_html, PROJECT_ROOT
 

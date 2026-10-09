@@ -39,17 +39,6 @@ def init_db():
             
             cols_str = ", ".join(columns)
             conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({cols_str})")
-        
-        # Insert default templates
-        for template in schema.get("default_templates", []):
-            existing = conn.execute(
-                "SELECT id FROM templates WHERE name = ?", (template["name"],)
-            ).fetchone()
-            if not existing:
-                conn.execute(
-                    "INSERT INTO templates (name, description, fields_json) VALUES (?, ?, ?)",
-                    (template["name"], template.get("description", ""), json.dumps(template.get("fields", []))),
-                )
 
 
 @contextmanager
@@ -78,7 +67,6 @@ def create_memory(
     description: str = "",
     substrate: str = "",
     process: str = "",
-    template_id: int = None,
     custom_fields: dict = None,
     references: dict = None,
 ) -> int:
@@ -92,8 +80,7 @@ def create_memory(
         description: Free text description
         substrate: Substrate type (Kapton, Si/SiO2, etc.)
         process: Fabrication process (BAMS, spin-coating, etc.)
-        template_id: Optional template ID
-        custom_fields: Dict of custom field name -> value
+        custom_fields: Dict of field name -> value
         references: Dict of ref_type -> list of paths
     
     Returns:
@@ -104,14 +91,12 @@ def create_memory(
     with _conn() as conn:
         cur = conn.execute(
             """INSERT INTO memories 
-               (title, type, subtype, date, description, substrate, process, created_at, template_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (title, type, subtype, date, description, substrate, process, created_at, template_id),
+               (title, type, subtype, date, description, substrate, process, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (title, type, subtype, date, description, substrate, process, created_at),
         )
         memory_id = cur.lastrowid
         
-        # Add base fields (date, description, substrate, process are in memories table)
-        # Add custom fields
         if custom_fields:
             for field_name, field_value in custom_fields.items():
                 conn.execute(
@@ -206,7 +191,7 @@ def list_memories(
 
 def update_memory(memory_id: int, **kwargs):
     """Update memory fields."""
-    allowed = {"title", "type", "subtype", "date", "description", "substrate", "process", "template_id"}
+    allowed = {"title", "type", "subtype", "date", "description", "substrate", "process"}
     updates = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
     
     if not updates:
@@ -298,53 +283,3 @@ def list_analysis_results(memory_id: int) -> list[dict]:
             "SELECT * FROM analysis_results WHERE memory_id = ?", (memory_id,)
         ).fetchall()
         return [dict(r) for r in rows]
-
-
-# ===== Templates =====
-
-def list_templates() -> list[dict]:
-    """List all templates."""
-    with _conn() as conn:
-        rows = conn.execute("SELECT * FROM templates ORDER BY name").fetchall()
-        return [dict(r) for r in rows]
-
-
-def get_template(template_id: int) -> Optional[dict]:
-    """Get template by ID."""
-    with _conn() as conn:
-        row = conn.execute("SELECT * FROM templates WHERE id = ?", (template_id,)).fetchone()
-        return dict(row) if row else None
-
-
-def get_template_by_name(name: str) -> Optional[dict]:
-    """Get template by name."""
-    with _conn() as conn:
-        row = conn.execute("SELECT * FROM templates WHERE name = ?", (name,)).fetchone()
-        return dict(row) if row else None
-
-
-def create_template(name: str, description: str, fields: list[dict]) -> int:
-    """Create a new template."""
-    with _conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO templates (name, description, fields_json) VALUES (?, ?, ?)",
-            (name, description, json.dumps(fields)),
-        )
-        return cur.lastrowid
-
-
-def update_template(template_id: int, name: str = None, description: str = None, fields: list[dict] = None):
-    """Update a template."""
-    with _conn() as conn:
-        if name is not None:
-            conn.execute("UPDATE templates SET name = ? WHERE id = ?", (name, template_id))
-        if description is not None:
-            conn.execute("UPDATE templates SET description = ? WHERE id = ?", (description, template_id))
-        if fields is not None:
-            conn.execute("UPDATE templates SET fields_json = ? WHERE id = ?", (json.dumps(fields), template_id))
-
-
-def delete_template(template_id: int):
-    """Delete a template."""
-    with _conn() as conn:
-        conn.execute("DELETE FROM templates WHERE id = ?", (template_id,))
