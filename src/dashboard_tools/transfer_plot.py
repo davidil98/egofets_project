@@ -1,10 +1,8 @@
-"""Plot transfer curves: an overview grid plus one image per measurement."""
+"""Plot transfer curves interactively with plotly."""
 
 from pathlib import Path
 
-from src.plotting import plot_transfer
-
-from ._common import render_curve_figures, resolve_measurements, safe_stem
+from ._common import plot_transfer_plotly, render_plotly_curves, resolve_measurements
 from .base import ParameterSchema, Tool, ToolResult
 
 
@@ -30,13 +28,12 @@ class TransferPlotTool(Tool):
         ref_path = Path(ref_path)
         names = resolve_measurements(ref_path, p["measurements"], "transfer")
 
-        figures = render_curve_figures(
-            plot_transfer, ref_path, names, output_dir,
-            stem=f"transfer_{safe_stem(ref_path.stem)}", loop=p["loop"],
+        figures = render_plotly_curves(
+            plot_transfer_plotly, ref_path, names, loop=p["loop"],
         )
+
         return ToolResult(
-            figures=figures,
-            figure_roles=["overview"] + ["curve"] * (len(figures) - 1),
+            plotly_figures=figures,
             summary={"measurements": names, "n_measurements": len(names), "loop": p["loop"]},
             description=f"Transfer curves plotted for {len(names)} measurements",
         )

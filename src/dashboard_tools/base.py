@@ -34,8 +34,7 @@ class ParameterSchema:
 class ToolResult:
     """Outputs of one tool run. All paths are absolute."""
 
-    figures: list[Path] = field(default_factory=list)
-    figure_roles: list[str] = field(default_factory=list)
+    plotly_figures: list = field(default_factory=list)
     tables: list[Path] = field(default_factory=list)
     summary: dict = field(default_factory=dict)
     description: str = ""

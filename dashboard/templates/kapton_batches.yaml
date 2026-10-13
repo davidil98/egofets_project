@@ -1,0 +1,15 @@
+name: kapton_batches
+description: Kapton substrate batch with standard parameters
+fields:
+- name: Thickness
+  type: text
+  default: 125uM
+  required: false
+- name: Size
+  type: text
+  default: 8cm*8cm
+  required: false
+- name: Photolitography
+  type: text
+  default: Standar
+  required: false

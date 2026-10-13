@@ -4,14 +4,10 @@ import re
 from pathlib import Path
 from typing import Callable
 
-import matplotlib
-
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 
-from src.readers.keithley_dean import list_measurements
+from src.readers.keithley_dean import list_measurements, read_all_curves, _has_hysteresis
 
 
 def safe_stem(text: str) -> str:
@@ -36,58 +32,129 @@ def resolve_measurements(hdf5_path: Path, requested: list[str], mode: str) -> li
     return [name for name in available if name in requested]
 
 
-def render_curve_figures(
+def plot_transfer_plotly(hdf5_path: Path, measurement_name: str, loop: bool = True) -> go.Figure:
+    """Return a plotly figure with all transfer curves for one measurement."""
+    fig = go.Figure()
+    curves = read_all_curves(hdf5_path, measurement_name)
+
+    for i, c in enumerate(curves):
+        v_gs = c["v_gs"]
+        i_ds = c["i_ds"]
+        v_ds = c["v_ds"]
+        curve_name = c["curve_name"]
+        curve_idx = curve_name.split("_")[-1]
+        label = f"{float(v_ds[0]):.2f} V (#{curve_idx})"
+
+        split = _has_hysteresis(v_gs)
+
+        if loop and split is not None:
+            # Forward: línea sólida
+            fig.add_trace(go.Scatter(
+                x=v_gs[:split + 1],
+                y=i_ds[:split + 1],
+                mode="lines+markers",
+                marker=dict(size=3),
+                line=dict(width=1.5),
+                name=label,
+                legendgroup=label,
+                showlegend=True,
+            ))
+            # Reverse: línea discontinua
+            fig.add_trace(go.Scatter(
+                x=v_gs[split + 1:],
+                y=i_ds[split + 1:],
+                mode="lines+markers",
+                marker=dict(size=3),
+                line=dict(width=1.5, dash="dash"),
+                name=f"{label} (rev)",
+                legendgroup=label,
+                showlegend=False,
+                hoverinfo="skip",
+            ))
+        else:
+            fig.add_trace(go.Scatter(
+                x=v_gs,
+                y=i_ds,
+                mode="lines+markers",
+                marker=dict(size=3),
+                line=dict(width=1.5),
+                name=label,
+                legendgroup=label,
+            ))
+
+    fig.update_layout(
+        title=f"Transfer — {measurement_name}",
+        xaxis_title="V_GS (V)",
+        yaxis_title="I_DS (A)",
+        legend=dict(font=dict(size=8), itemsizing="constant"),
+        hovermode="closest",
+        height=500,
+    )
+    return fig
+
+
+def plot_output_plotly(hdf5_path: Path, measurement_name: str) -> go.Figure:
+    """Return a plotly figure with all output curves for one measurement."""
+    fig = go.Figure()
+    curves = read_all_curves(hdf5_path, measurement_name)
+
+    for i, c in enumerate(curves):
+        v_gs = c["v_gs"]
+        i_ds = c["i_ds"]
+        v_ds = c["v_ds"]
+        curve_name = c["curve_name"]
+        curve_idx = curve_name.split("_")[-1]
+        label = f"{float(v_gs[0]):.2f} V (#{curve_idx})"
+
+        fig.add_trace(go.Scatter(
+            x=v_ds,
+            y=i_ds,
+            mode="lines+markers",
+            marker=dict(size=3),
+            line=dict(width=1.5),
+            name=label,
+            legendgroup=label,
+        ))
+
+    fig.update_layout(
+        title=f"Output — {measurement_name}",
+        xaxis_title="V_DS (V)",
+        yaxis_title="I_DS (A)",
+        legend=dict(font=dict(size=8), itemsizing="constant"),
+        hovermode="closest",
+        height=500,
+    )
+    return fig
+
+
+def render_plotly_curves(
     plot_func: Callable,
     hdf5_path: Path,
     measurements: list[str],
-    output_dir: Path,
-    stem: str,
-    ncols: int = 3,
     **plot_kwargs,
-) -> list[Path]:
-    """Save one overview grid plus one image per measurement.
+) -> list[go.Figure]:
+    """Return a list of plotly figures: one per measurement.
 
-    The overview is what the dashboard shows as a thumbnail; the individual
-    images are opened when the user expands it.
+    Each figure is fully interactive (hover, legend toggle, zoom, pan).
     """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    individual_dir = output_dir / "curves"
-    individual_dir.mkdir(parents=True, exist_ok=True)
-    paths: list[Path] = []
-
-    n = len(measurements)
-    nrows = (n + ncols - 1) // ncols
-    grid, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows), squeeze=False)
-    axes_flat = axes.ravel()
-
-    for ax, name in zip(axes_flat, measurements):
-        _draw_safely(plot_func, hdf5_path, name, ax, plot_kwargs)
-    for ax in axes_flat[n:]:
-        ax.set_visible(False)
-    grid.tight_layout()
-    grid_path = output_dir / f"{stem}_overview.png"
-    grid.savefig(grid_path, dpi=120)
-    plt.close(grid)
-    paths.append(grid_path)
-
+    figures = []
     for name in measurements:
-        fig, ax = plt.subplots(figsize=(6, 4.5))
-        _draw_safely(plot_func, hdf5_path, name, ax, plot_kwargs)
-        fig.tight_layout()
-        path = individual_dir / f"{stem}_{safe_stem(name)}.png"
-        fig.savefig(path, dpi=120)
-        plt.close(fig)
-        paths.append(path)
-
-    return paths
-
-
-def _draw_safely(plot_func, hdf5_path, name, ax, plot_kwargs) -> None:
-    try:
-        plot_func(hdf5_path, name, ax=ax, **plot_kwargs)
-    except Exception as exc:  # noqa: BLE001 - shown inside the figure instead of aborting
-        ax.text(0.5, 0.5, f"Error: {exc}", transform=ax.transAxes, ha="center", wrap=True)
-        ax.set_title(name, fontsize=9)
+        try:
+            fig = plot_func(hdf5_path, name, **plot_kwargs)
+            figures.append(fig)
+        except Exception as exc:
+            # Figura de error en lugar de abortar
+            fig = go.Figure()
+            fig.add_annotation(
+                text=f"Error: {exc}",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5,
+                showarrow=False,
+                font=dict(size=14, color="red"),
+            )
+            fig.update_layout(title=name, height=400)
+            figures.append(fig)
+    return figures
 
 
 def stats_of(values: np.ndarray) -> dict:

@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 from src.analysis import extract_vth_for_transfers
 
-from ._common import resolve_measurements, safe_stem, stats_of
+from ._common import resolve_measurements, stats_of
 from .base import ParameterSchema, Tool, ToolResult
 
 
@@ -46,21 +46,34 @@ class TransferVthTool(Tool):
             raise ValueError("No V_th could be extracted from the selected transfers")
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        stem = f"vth_{safe_stem(ref_path.stem)}"
-        table_path = output_dir / f"{stem}.csv"
+        table_path = output_dir / f"vth_{ref_path.stem}.csv"
         df.to_csv(table_path, index=False)
 
-        figure_path = output_dir / f"{stem}_bars.png"
-        fig, ax = plt.subplots(figsize=(max(6, 0.4 * len(df)), 4.5))
-        ax.bar(range(len(df)), df["V_th (V)"], color="steelblue")
-        ax.set_xticks(range(len(df)))
-        ax.set_xticklabels(df["measurement"], rotation=60, ha="right", fontsize=7)
-        ax.set_ylabel("V_th (V)")
-        ax.set_title(f"V_th — {ref_path.stem}")
-        ax.grid(True, axis="y", alpha=0.3)
-        fig.tight_layout()
-        fig.savefig(figure_path, dpi=120)
-        plt.close(fig)
+        # Figura plotly interactiva
+        fig = go.Figure(go.Bar(
+            x=df["measurement"],
+            y=df["V_th (V)"],
+            text=[f"{v:.3f}" for v in df["V_th (V)"]],
+            textposition="auto",
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "V_th: %{y:.4f} V<br>"
+                "R²: %{customdata[0]:.4f}<br>"
+                "v_min: %{customdata[1]:.2f} V<br>"
+                "v_max: %{customdata[2]:.2f} V<extra></extra>"
+            ),
+            customdata=list(zip(df["R^2"], df["v_min (V)"], df["v_max (V)"])),
+            marker_color="steelblue",
+        ))
+        fig.update_layout(
+            title=f"V_th — {ref_path.stem}",
+            xaxis_title="Medición",
+            yaxis_title="V_th (V)",
+            xaxis_tickangle=-45,
+            height=max(400, 50 * len(df)),
+            margin=dict(l=60, r=20, t=60, b=120),
+            hovermode="x unified",
+        )
 
         vth_stats = stats_of(df["V_th (V)"].to_numpy())
         summary = {
@@ -76,8 +89,7 @@ class TransferVthTool(Tool):
             f"IQR {vth_stats['iqr']:.3f} V"
         )
         return ToolResult(
-            figures=[figure_path],
-            figure_roles=["overview"],
+            plotly_figures=[fig],
             tables=[table_path],
             summary=summary,
             description=description,

@@ -1,10 +1,8 @@
-"""Plot output curves: an overview grid plus one image per measurement."""
+"""Plot output curves interactively with plotly."""
 
 from pathlib import Path
 
-from src.plotting import plot_output
-
-from ._common import render_curve_figures, resolve_measurements, safe_stem
+from ._common import plot_output_plotly, render_plotly_curves, resolve_measurements
 from .base import ParameterSchema, Tool, ToolResult
 
 
@@ -26,13 +24,10 @@ class OutputPlotTool(Tool):
         ref_path = Path(ref_path)
         names = resolve_measurements(ref_path, p["measurements"], "output")
 
-        figures = render_curve_figures(
-            plot_output, ref_path, names, output_dir,
-            stem=f"output_{safe_stem(ref_path.stem)}",
-        )
+        figures = render_plotly_curves(plot_output_plotly, ref_path, names)
+
         return ToolResult(
-            figures=figures,
-            figure_roles=["overview"] + ["curve"] * (len(figures) - 1),
+            plotly_figures=figures,
             summary={"measurements": names, "n_measurements": len(names)},
             description=f"Output curves plotted for {len(names)} measurements",
         )

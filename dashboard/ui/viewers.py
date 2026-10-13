@@ -57,7 +57,7 @@ def create_photo_viewer(photo_path: Path):
         ui.label(f"Photo not found: {photo_path.name}").classes("text-red-500 text-sm")
         return
 
-    ui.image(photo_path.as_posix()).classes(
+    ui.image(photo_path).classes(
         "w-40 h-40 object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
     ).on("click", lambda: _show_zoom_dialog(photo_path))
 
@@ -68,7 +68,7 @@ def create_figure_viewer(figure_path: Path, classes: str = "w-full", max_height:
         ui.label(f"Figure not found: {figure_path.name}").classes("text-red-500 text-sm")
         return
 
-    image = ui.image(figure_path.as_posix()).classes(
+    image = ui.image(figure_path).classes(
         f"{classes} object-contain rounded bg-white cursor-pointer hover:opacity-90 transition-opacity"
     ).on("click", lambda: _show_zoom_dialog(figure_path))
     if max_height:
@@ -77,5 +77,5 @@ def create_figure_viewer(figure_path: Path, classes: str = "w-full", max_height:
 
 def _show_zoom_dialog(img_path: Path):
     with ui.dialog() as dlg, ui.card().classes("w-[80vw] h-[80vh]"):
-        ui.image(img_path.as_posix()).classes("w-full h-full object-contain")
+        ui.image(img_path).classes("w-full h-full object-contain")
     dlg.open()
