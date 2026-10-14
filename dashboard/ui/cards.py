@@ -1,6 +1,7 @@
 """Configurable section cards for the memory detail view."""
 
 import json
+import re
 from pathlib import Path
 from typing import Callable
 
@@ -24,6 +25,8 @@ SECTION_META: dict[str, tuple[str, str]] = {
 }
 
 REF_TYPES: tuple[str, ...] = ("hdf5", "photo", "csv", "figure")
+
+DEFAULT_PHOTO_SECTION = "Section 1"
 
 REF_EXTENSIONS: dict[str, tuple[str, ...]] = {
     "hdf5": (".hdf5",),
@@ -78,6 +81,36 @@ def _relative_to_root(path: str, project_root: Path) -> str:
 def _reference_metadata(reference: dict) -> dict:
     """Parse the metadata_json of a reference, falling back to an empty dict."""
     return _safe_params(reference.get("metadata_json"))
+
+
+def _photo_section(reference: dict) -> str:
+    """The section title stored in a photo reference, or an empty string."""
+    return (_reference_metadata(reference).get("section") or "").strip()
+
+
+def _section_names(references: list[dict]) -> list[str]:
+    """Distinct photo section titles of a memory, in order of first appearance."""
+    names: list[str] = []
+    for reference in references:
+        if reference.get("ref_type") != "photo":
+            continue
+        section = _photo_section(reference)
+        if section and section not in names:
+            names.append(section)
+    return names
+
+
+def _next_section_name(references: list[dict]) -> str:
+    """Return the next free 'Section <n>' title."""
+    used = set()
+    for name in _section_names(references):
+        match = re.match(r"Section (\d+)$", name)
+        if match:
+            used.add(int(match.group(1)))
+    n = 1
+    while n in used:
+        n += 1
+    return f"Section {n}"
 
 
 def _is_tool_output(reference: dict) -> bool:
@@ -320,9 +353,24 @@ class ReferencesCard(SectionCard):
 
         with ui.row().classes("w-full items-end gap-2"):
             ref_type_select = ui.select(list(REF_TYPES), value="csv", label="Type").props("outlined dense").classes("w-32")
-            ui.button("Add Files", icon="attach_file", on_click=lambda: self.pick_files(ref_type_select)).props(
+
+            section_select = ui.select(
+                _section_names(self.memory.get("references", [])),
+                label="Section",
+                with_input=True,
+                new_value_mode="add-unique",
+            ).props("outlined dense clearable").classes("w-44")
+
+            ui.button("Add Files", icon="attach_file", on_click=lambda: self.pick_files(ref_type_select, section_select)).props(
                 "dense color=primary"
             )
+
+        def _toggle_section(event=None) -> None:
+            value = event.value if event is not None else ref_type_select.value
+            section_select.set_visibility(value == "photo")
+
+        ref_type_select.on_value_change(_toggle_section)
+        _toggle_section()
 
     def _runs_by_ref(self) -> dict[str, list[dict]]:
         """Group the memory's tool runs by the source reference they used."""
@@ -366,7 +414,7 @@ class ReferencesCard(SectionCard):
         ui.notify("Reference deleted", color="positive")
         self.notify_changed()
 
-    async def pick_files(self, ref_type_select: ui.select) -> None:
+    async def pick_files(self, ref_type_select: ui.select, section_select: ui.select) -> None:
         """Pick files and attach them with the selected reference type."""
         ref_type = ref_type_select.value or "csv"
         paths = await pick_file(
@@ -376,8 +424,14 @@ class ReferencesCard(SectionCard):
         )
         if not paths:
             return
+
+        metadata = None
+        if ref_type == "photo":
+            title = (section_select.value or "").strip() or _next_section_name(self.memory.get("references", []))
+            metadata = {"section": title}
+
         for path in paths:
-            db.add_reference(self.memory["id"], ref_type, _relative_to_root(path, self.project_root))
+            db.add_reference(self.memory["id"], ref_type, _relative_to_root(path, self.project_root), metadata)
         ui.notify(f"Added {len(paths)} reference(s)", color="positive")
         self.notify_changed()
 
@@ -502,19 +556,28 @@ def _confirm_remove_run(run: dict, on_done: Callable[[], None]) -> None:
 
 
 class PhotosCard(SectionCard):
-    """Read-only photo gallery."""
+    """Photo gallery grouped by titled, collapsible sections."""
 
     def content(self) -> None:
-        """Render a thumbnail for every photo reference."""
+        """Render photos grouped by their section, each under a titled separator."""
         photo_refs = [r for r in self.memory.get("references", []) if r.get("ref_type") == "photo"]
         if not photo_refs:
             _empty_hint("No photo references")
             return
 
         columns = (self.conf.get("photos") or {}).get("columns", 4) or 4
-        with ui.grid(columns=columns).classes("w-full gap-2 justify-items-center"):
-            for reference in photo_refs:
-                create_photo_viewer(self.project_root / reference.get("ref_path", ""))
+
+        groups: dict[str, list[dict]] = {}
+        for reference in photo_refs:
+            section = (_reference_metadata(reference).get("section") or "").strip() or DEFAULT_PHOTO_SECTION
+            groups.setdefault(section, []).append(reference)
+
+        for title, refs in groups.items():
+            ui.separator().classes("mt-2")
+            with ui.expansion(f"{title} ({len(refs)})", value=True, icon="photo_library").classes("w-full"):
+                with ui.grid(columns=columns).classes("w-full gap-2 justify-items-center"):
+                    for reference in refs:
+                        create_photo_viewer(self.project_root / reference.get("ref_path", ""))
 
 
 SECTION_CARDS: dict[str, type[SectionCard]] = {
