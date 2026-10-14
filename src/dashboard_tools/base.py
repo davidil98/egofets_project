@@ -1,9 +1,9 @@
 """Base classes shared by every dashboard tool.
 
-A tool is a Python script that the dashboard runs on an attached file with a
-set of user-chosen parameters. It produces one of three things: a figure, a
-table or an image. The dashboard stores the outputs as memory references and
-the parameters as an analysis result.
+A tool is a Python script that the dashboard runs on an attached file with a set
+of user-chosen parameters. It returns an interactive figure (plotly), tabular
+data and a short summary. The dashboard stores them as a tool run; nothing is
+written to disk unless the tool explicitly needs a scratch directory (workdir).
 """
 
 from abc import ABC, abstractmethod
@@ -31,11 +31,19 @@ class ParameterSchema:
 
 
 @dataclass
-class ToolResult:
-    """Outputs of one tool run. All paths are absolute."""
+class ToolTable:
+    """Tabular data produced by a tool: a label plus a list of row dicts."""
 
-    plotly_figures: list = field(default_factory=list)
-    tables: list[Path] = field(default_factory=list)
+    label: str
+    records: list = field(default_factory=list)
+
+
+@dataclass
+class ToolResult:
+    """What a tool returns: interactive figures, tables and a short summary."""
+
+    figures: list = field(default_factory=list)
+    tables: list = field(default_factory=list)
     summary: dict = field(default_factory=dict)
     description: str = ""
 
@@ -71,8 +79,12 @@ class Tool(ABC):
         return result
 
     @abstractmethod
-    def run(self, ref_path: Path, params: dict, output_dir: Path) -> ToolResult:
-        """Process ref_path with validated params, writing files into output_dir."""
+    def run(self, ref_path: Path, params: dict, workdir: Path) -> ToolResult:
+        """Process ref_path with validated params.
+
+        `workdir` is a throwaway directory the tool may use for scratch files; it is
+        removed after the run. Tools that need no scratch space should ignore it.
+        """
 
 
 def _coerce_value(schema: ParameterSchema, value: Any) -> Any:

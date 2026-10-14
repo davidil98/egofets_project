@@ -7,8 +7,9 @@ from typing import Callable
 from nicegui import ui
 
 from dashboard.file_picker import pick_file
+from dashboard.tool_runs import remove_tool_run, rerun_tool_run, summarize_run
 from dashboard.ui.tool_dialog import show_tool_dialog
-from dashboard.ui.viewers import create_csv_viewer, create_figure_viewer, create_photo_viewer
+from dashboard.ui.viewers import create_csv_viewer, create_photo_viewer, create_plotly_viewer
 from src import db
 
 
@@ -28,7 +29,7 @@ REF_EXTENSIONS: dict[str, tuple[str, ...]] = {
     "hdf5": (".hdf5",),
     "photo": (".jpg", ".jpeg", ".png"),
     "csv": (".csv",),
-    "figure": (".png", ".pdf", ".svg"),
+    "figure": (".plotly.json", ".png", ".pdf", ".svg"),
 }
 
 REF_ICONS: dict[str, str] = {
@@ -289,26 +290,30 @@ class ReferencesCard(SectionCard):
     """Attached files grouped by type, with the tools that can run on them."""
 
     def content(self) -> None:
-        """Render the reference groups, the Apply tool actions and the add-files row."""
+        """Render the reference groups, the tools applied to each and the add-files row."""
         grouped = _group_references(self.memory.get("references", []))
+        runs_by_ref = self._runs_by_ref()
 
         if not grouped:
             _empty_hint("No references")
         for ref_type, references in grouped.items():
             with ui.expansion(f"{ref_type} ({len(references)})", icon=REF_ICONS.get(ref_type, "insert_drive_file")).classes("w-full"):
                 for reference in references:
-                    with ui.row().classes("w-full items-center gap-2"):
-                        ui.badge(reference.get("ref_type", "")).props("outline color=gray")
-                        path = reference.get("ref_path", "")
-                        ui.label(path).classes("flex-1 truncate font-mono text-sm").tooltip(path)
-                        if reference.get("ref_type") == "hdf5":
-                            ui.button("Apply tool", icon="play_arrow", on_click=lambda _, p=path: self.apply_tool(p)).props(
-                                "dense flat color=primary size=sm"
-                            )
-                        if self.editing:
-                            ui.button(icon="delete", on_click=lambda _, r=reference: self.delete_reference(r)).props(
-                                "flat dense color=negative size=sm"
-                            )
+                    path = reference.get("ref_path", "")
+                    with ui.column().classes("w-full gap-1"):
+                        with ui.row().classes("w-full items-center gap-2"):
+                            ui.badge(reference.get("ref_type", "")).props("outline color=gray")
+                            ui.label(path).classes("flex-1 truncate font-mono text-sm").tooltip(path)
+                            if reference.get("ref_type") == "hdf5":
+                                ui.button("Apply tool", icon="play_arrow", on_click=lambda _, p=path: self.apply_tool(p)).props(
+                                    "dense flat color=primary size=sm"
+                                )
+                            if self.editing:
+                                ui.button(icon="delete", on_click=lambda _, r=reference: self.delete_reference(r)).props(
+                                    "flat dense color=negative size=sm"
+                                )
+                        for run in runs_by_ref.get(path, []):
+                            self._render_run_row(run)
 
         if not self.editing:
             return
@@ -318,6 +323,38 @@ class ReferencesCard(SectionCard):
             ui.button("Add Files", icon="attach_file", on_click=lambda: self.pick_files(ref_type_select)).props(
                 "dense color=primary"
             )
+
+    def _runs_by_ref(self) -> dict[str, list[dict]]:
+        """Group the memory's tool runs by the source reference they used."""
+        grouped: dict[str, list[dict]] = {}
+        for run in self.memory.get("tool_runs", []):
+            grouped.setdefault(run.get("ref_path", ""), []).append(run)
+        return grouped
+
+    def _render_run_row(self, run: dict) -> None:
+        """One line showing an applied tool, with re-run and remove buttons."""
+        with ui.row().classes("w-full items-center gap-2 pl-6"):
+            ui.icon("insights").classes("text-gray-400 text-sm")
+            ui.label(summarize_run(run)).classes("flex-1 text-xs text-gray-600")
+            ui.button(icon="replay", on_click=lambda _, r=run: self._rerun(r)).props(
+                "flat dense color=primary size=sm"
+            ).tooltip("Re-run with the same parameters")
+            ui.button(icon="delete", on_click=lambda _, r=run: _confirm_remove_run(r, self.notify_changed)).props(
+                "flat dense color=negative size=sm"
+            ).tooltip("Remove this tool and everything it produced")
+
+    def _rerun(self, run: dict) -> None:
+        """Re-apply an existing tool run with its stored parameters."""
+        try:
+            new_id = rerun_tool_run(run["id"])
+        except Exception as exc:
+            ui.notify(f"Re-run failed: {exc}", color="negative", multi_line=True, timeout=8000)
+            return
+        if new_id is None:
+            ui.notify("That run was already gone", color="warning")
+        else:
+            ui.notify(f"Re-ran {run.get('tool_name', 'tool')}", color="positive")
+        self.notify_changed()
 
     def apply_tool(self, ref_path: str) -> None:
         """Open the Apply tool dialog for an HDF5 reference."""
@@ -346,29 +383,39 @@ class ReferencesCard(SectionCard):
 
 
 class AnalysisCard(SectionCard):
-    """Stored analysis results: parameters, summary and the output table."""
+    """Applied tools: parameters, summary and data tables of each run."""
 
     def content(self) -> None:
-        """Render one expansion per analysis result."""
-        results = self.memory.get("analysis_results", [])
-        if not results:
-            _empty_hint("No analysis results yet. Apply a tool to an HDF5 reference in References.")
+        """Render one expansion per applied tool."""
+        runs = self.memory.get("tool_runs", [])
+        if not runs:
+            _empty_hint("No tools applied yet. Use Apply tool on an HDF5 reference in References.")
             return
 
-        for result in results:
-            created_at = (result.get("created_at") or "")[:10]
-            with ui.expansion(f"{result.get('function_name', '?')} ({created_at})").classes("w-full"):
-                data = _safe_params(result.get("params_json"))
-                structured = "params" in data
-                if structured and data.get("description"):
-                    ui.label(data["description"]).classes("text-sm text-gray-700")
-                params = data.get("params", {}) if structured else data
-                summary = data.get("summary", {}) if structured else {}
+        for run in runs:
+            created_at = (run.get("created_at") or "")[:10]
+            with ui.expansion(f"{run.get('tool_name', '?')} ({created_at})").classes("w-full"):
+                if run.get("description"):
+                    ui.label(run["description"]).classes("text-sm text-gray-700")
+                ui.label(f"Source: {run.get('ref_path', '')}").classes("font-mono text-xs text-gray-500")
+                _render_block("Parameters", _safe_params(run.get("params_json")))
+                _render_block("Summary", _safe_params(run.get("summary_json")))
+                for item in run.get("items", []):
+                    if item.get("kind") == "table":
+                        _render_table_item(item)
 
-                _render_block("Parameters", params)
-                _render_block("Summary", summary)
-                if result.get("results_csv_path"):
-                    ui.label(f"Table: {result['results_csv_path']}").classes("font-mono text-sm text-blue-600")
+
+def _render_table_item(item: dict) -> None:
+    """Render one table produced by a run."""
+    content = _safe_params(item.get("content_json"))
+    records = content.get("records", []) if isinstance(content, dict) else []
+    label = item.get("label") or "table"
+    with ui.expansion(f"{label} ({len(records)} rows)").classes("w-full mt-1"):
+        if records:
+            columns = [{"name": key, "label": key, "field": key} for key in records[0].keys()]
+            ui.table(columns=columns, rows=records).classes("w-full").props("dense flat")
+        else:
+            _empty_hint("Empty table")
 
 
 def _render_block(title: str, values: dict) -> None:
@@ -394,33 +441,22 @@ def _format(value) -> str:
 
 
 class FiguresCard(SectionCard):
-    """Figures from tool runs (grouped per run) and legacy CSV references."""
+    """Interactive figures produced by the applied tools."""
 
     def content(self) -> None:
-        """Render every tool run, standalone figures and legacy CSV charts."""
-        references = self.memory.get("references", [])
-        figure_refs = [r for r in references if r.get("ref_type") == "figure"]
-        csv_refs = [r for r in references if r.get("ref_type") == "csv"]
+        """Render the figures of every applied tool, plus legacy CSV charts."""
+        runs = [
+            run for run in self.memory.get("tool_runs", [])
+            if any(item.get("kind") == "figure" for item in run.get("items", []))
+        ]
+        csv_refs = [r for r in self.memory.get("references", []) if r.get("ref_type") == "csv"]
 
-        if not figure_refs and not csv_refs:
+        if not runs and not csv_refs:
             _empty_hint("No figures yet. Apply a tool to an HDF5 reference in References.")
             return
 
-        runs: dict[int, list[tuple[dict, dict]]] = {}
-        standalone: list[dict] = []
-        for reference in figure_refs:
-            meta = _reference_metadata(reference)
-            if "analysis_id" in meta:
-                runs.setdefault(meta["analysis_id"], []).append((meta, reference))
-            else:
-                standalone.append(reference)
-
-        analyses = {a["id"]: a for a in self.memory.get("analysis_results", [])}
-        for analysis_id, items in runs.items():
-            self._render_run(analyses.get(analysis_id), items)
-
-        for reference in standalone:
-            create_figure_viewer(self.project_root / reference["ref_path"], max_height=self._max_height())
+        for run in runs:
+            self._render_run(run)
 
         for reference in csv_refs:
             create_csv_viewer(self.project_root / reference.get("ref_path", ""))
@@ -428,23 +464,41 @@ class FiguresCard(SectionCard):
     def _max_height(self) -> int | None:
         return (self.conf.get("figures") or {}).get("max_height")
 
-    def _render_run(self, analysis: dict | None, items: list[tuple[dict, dict]]) -> None:
-        """Show one tool run: its overview figure, and its curves folded below."""
-        name = analysis.get("function_name", "tool run") if analysis else "tool run"
-        date = (analysis.get("created_at") or "")[:10] if analysis else ""
-        overview = [r for m, r in items if m.get("role") == "overview"]
-        curves = [r for m, r in items if m.get("role") != "overview"]
-        other = [r for m, r in items if m.get("role") not in ("overview", "curve")]
-        overview += other
+    def _render_run(self, run: dict) -> None:
+        """Show one applied tool: all its figures stacked vertically."""
+        name = run.get("tool_name", "tool")
+        date = (run.get("created_at") or "")[:10]
+        figures = [item for item in run.get("items", []) if item.get("kind") == "figure"]
 
-        with ui.expansion(f"{name} · {date}", icon="insights", value=True).classes("w-full"):
-            for reference in overview:
-                create_figure_viewer(self.project_root / reference["ref_path"], max_height=self._max_height())
-            if curves:
-                with ui.expansion(f"Individual curves ({len(curves)})", icon="grid_view").classes("w-full"):
-                    with ui.grid(columns=4).classes("w-full gap-2"):
-                        for reference in curves:
-                            create_figure_viewer(self.project_root / reference["ref_path"], classes="w-full h-32")
+        with ui.expansion(f"{name} · {date} ({len(figures)} figures)", icon="insights", value=True).classes("w-full"):
+            with ui.column().classes("w-full gap-4"):
+                for item in figures:
+                    create_plotly_viewer(_safe_params(item.get("content_json")), max_height=self._max_height())
+
+
+def _confirm_remove_run(run: dict, on_done: Callable[[], None]) -> None:
+    """Ask for confirmation, then remove the tool run and everything it produced."""
+    with ui.dialog() as dlg, ui.card().classes("w-96"):
+        ui.label(f"Remove {run.get('tool_name', 'tool')}?").classes("text-lg font-bold")
+        ui.label(summarize_run(run)).classes("text-sm text-gray-600")
+        ui.label("This deletes the run and all the figures and data it produced.").classes(
+            "text-xs text-gray-500"
+        )
+        with ui.row().classes("w-full justify-end gap-2 mt-2"):
+            ui.button("Cancel", on_click=dlg.close).props("flat")
+
+            def do_remove() -> None:
+                dlg.close()
+                removed = remove_tool_run(run["id"])
+                if removed is None:
+                    ui.notify("That run was already gone", color="warning")
+                else:
+                    ui.notify(f"Removed — {summarize_run(removed)}", color="positive")
+                on_done()
+
+            ui.button("Remove", icon="delete", on_click=do_remove).props("color=negative")
+
+    dlg.open()
 
 
 class PhotosCard(SectionCard):

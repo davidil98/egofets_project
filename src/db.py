@@ -147,7 +147,16 @@ def get_memory(memory_id: int) -> Optional[dict]:
                 "SELECT * FROM analysis_results WHERE memory_id = ?", (memory_id,)
             ).fetchall()
         ]
-        
+
+        # Load tool runs (with their items)
+        run_rows = conn.execute(
+            "SELECT * FROM tool_runs WHERE memory_id = ? ORDER BY created_at DESC, id DESC",
+            (memory_id,),
+        ).fetchall()
+        memory["tool_runs"] = [
+            _with_items(conn, dict(row)) for row in run_rows
+        ]
+
         return memory
 
 
@@ -283,3 +292,91 @@ def list_analysis_results(memory_id: int) -> list[dict]:
             "SELECT * FROM analysis_results WHERE memory_id = ?", (memory_id,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ===== Tool Runs =====
+
+def _with_items(conn, run: dict) -> dict:
+    """Attach the items (figures, tables, images) to a tool run dict."""
+    run["items"] = [
+        dict(r) for r in conn.execute(
+            "SELECT * FROM tool_run_items WHERE run_id = ? ORDER BY position, id",
+            (run["id"],),
+        ).fetchall()
+    ]
+    return run
+
+
+def create_tool_run(
+    memory_id: int,
+    ref_path: str,
+    tool_name: str,
+    params: dict,
+    summary: dict = None,
+    description: str = "",
+) -> int:
+    """Insert a tool run (the recipe and its summary) and return its id."""
+    created_at = datetime.now().isoformat()
+    with _conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO tool_runs
+               (memory_id, ref_path, tool_name, params_json, summary_json, description, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (memory_id, ref_path, tool_name, json.dumps(params),
+             json.dumps(summary or {}), description or "", created_at),
+        )
+        return cur.lastrowid
+
+
+def add_tool_run_item(run_id: int, kind: str, position: int, label: str, content: dict) -> int:
+    """Attach one figure, table or image to a run."""
+    with _conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO tool_run_items (run_id, kind, position, label, content_json)
+               VALUES (?, ?, ?, ?, ?)""",
+            (run_id, kind, position, label or "", json.dumps(content)),
+        )
+        return cur.lastrowid
+
+
+def get_tool_run(run_id: int) -> Optional[dict]:
+    """Return a tool run with its items, or None."""
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM tool_runs WHERE id = ?", (run_id,)).fetchone()
+        return _with_items(conn, dict(row)) if row else None
+
+
+def list_tool_runs(memory_id: int, ref_path: str = None) -> list[dict]:
+    """List tool runs of a memory, optionally filtered by source reference."""
+    with _conn() as conn:
+        if ref_path is None:
+            rows = conn.execute(
+                "SELECT * FROM tool_runs WHERE memory_id = ? ORDER BY created_at DESC, id DESC",
+                (memory_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT * FROM tool_runs WHERE memory_id = ? AND ref_path = ?
+                   ORDER BY created_at DESC, id DESC""",
+                (memory_id, ref_path),
+            ).fetchall()
+        return [_with_items(conn, dict(r)) for r in rows]
+
+
+def delete_tool_run(run_id: int):
+    """Delete a tool run and (via cascade) all its items."""
+    with _conn() as conn:
+        conn.execute("DELETE FROM tool_runs WHERE id = ?", (run_id,))
+
+
+def delete_tool_runs_for(memory_id: int, ref_path: str, tool_name: str) -> list[int]:
+    """Delete every run matching a (memory, reference, tool) triple. Returns their ids."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id FROM tool_runs WHERE memory_id = ? AND ref_path = ? AND tool_name = ?",
+            (memory_id, ref_path, tool_name),
+        ).fetchall()
+        ids = [r["id"] for r in rows]
+        for run_id in ids:
+            conn.execute("DELETE FROM tool_runs WHERE id = ?", (run_id,))
+        return ids

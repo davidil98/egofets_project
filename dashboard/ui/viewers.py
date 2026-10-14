@@ -59,23 +59,24 @@ def create_photo_viewer(photo_path: Path):
 
     ui.image(photo_path).classes(
         "w-40 h-40 object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
-    ).on("click", lambda: _show_zoom_dialog(photo_path))
+    ).on("click", lambda: _show_photo_zoom(photo_path))
 
 
-def create_figure_viewer(figure_path: Path, classes: str = "w-full", max_height: int | None = None):
-    """Render a generated figure (plot image) that opens full size on click."""
-    if not figure_path.exists():
-        ui.label(f"Figure not found: {figure_path.name}").classes("text-red-500 text-sm")
-        return
-
-    image = ui.image(figure_path).classes(
-        f"{classes} object-contain rounded bg-white cursor-pointer hover:opacity-90 transition-opacity"
-    ).on("click", lambda: _show_zoom_dialog(figure_path))
-    if max_height:
-        image.style(f"max-height: {max_height}px")
-
-
-def _show_zoom_dialog(img_path: Path):
+def _show_photo_zoom(img_path: Path):
     with ui.dialog() as dlg, ui.card().classes("w-[80vw] h-[80vh]"):
         ui.image(img_path).classes("w-full h-full object-contain")
     dlg.open()
+
+
+def create_plotly_viewer(figure_spec, max_height: int | None = None):
+    """Render a plotly figure from its JSON spec (a dict, as stored in the database)."""
+    if not figure_spec:
+        ui.label("Empty figure").classes("text-red-500 text-sm")
+        return
+    try:
+        fig = go.Figure(figure_spec)
+        if max_height:
+            fig.update_layout(height=max_height)
+        ui.plotly(fig).classes("w-full")
+    except Exception as e:
+        ui.label(f"Error loading figure: {e}").classes("text-red-500 text-sm")

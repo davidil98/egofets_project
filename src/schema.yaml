@@ -46,3 +46,26 @@ tables:
       params_json: TEXT DEFAULT '{}'
       results_csv_path: TEXT  # relative path to CSV in data/processed/
       created_at: TEXT NOT NULL
+
+  tool_runs:
+    description: "A dashboard tool applied to an attached file"
+    columns:
+      id: INTEGER PRIMARY KEY AUTOINCREMENT
+      memory_id: INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE
+      ref_path: TEXT NOT NULL  # source file the tool ran on (relative to project root)
+      tool_name: TEXT NOT NULL
+      params_json: TEXT DEFAULT '{}'
+      summary_json: TEXT DEFAULT '{}'
+      description: TEXT DEFAULT ''
+      created_at: TEXT NOT NULL
+
+  tool_run_items:
+    description: "One figure, table or image produced by a tool run"
+    columns:
+      id: INTEGER PRIMARY KEY AUTOINCREMENT
+      run_id: INTEGER NOT NULL REFERENCES tool_runs(id) ON DELETE CASCADE
+      kind: TEXT NOT NULL  # figure | table | image
+      position: INTEGER NOT NULL DEFAULT 0
+      label: TEXT DEFAULT ''
+      content_json: TEXT DEFAULT '{}'  # plotly figure spec, table records, ...
+

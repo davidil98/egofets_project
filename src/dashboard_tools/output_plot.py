@@ -19,7 +19,7 @@ class OutputPlotTool(Tool):
         ),
     )
 
-    def run(self, ref_path: Path, params: dict, output_dir: Path) -> ToolResult:
+    def run(self, ref_path: Path, params: dict, workdir: Path) -> ToolResult:
         p = self.coerce(params)
         ref_path = Path(ref_path)
         names = resolve_measurements(ref_path, p["measurements"], "output")
@@ -27,7 +27,7 @@ class OutputPlotTool(Tool):
         figures = render_plotly_curves(plot_output_plotly, ref_path, names)
 
         return ToolResult(
-            plotly_figures=figures,
+            figures=figures,
             summary={"measurements": names, "n_measurements": len(names)},
             description=f"Output curves plotted for {len(names)} measurements",
         )

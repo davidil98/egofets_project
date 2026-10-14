@@ -23,17 +23,15 @@ class TransferPlotTool(Tool):
         ),
     )
 
-    def run(self, ref_path: Path, params: dict, output_dir: Path) -> ToolResult:
+    def run(self, ref_path: Path, params: dict, workdir: Path) -> ToolResult:
         p = self.coerce(params)
         ref_path = Path(ref_path)
         names = resolve_measurements(ref_path, p["measurements"], "transfer")
 
-        figures = render_plotly_curves(
-            plot_transfer_plotly, ref_path, names, loop=p["loop"],
-        )
+        figures = render_plotly_curves(plot_transfer_plotly, ref_path, names, loop=p["loop"])
 
         return ToolResult(
-            plotly_figures=figures,
+            figures=figures,
             summary={"measurements": names, "n_measurements": len(names), "loop": p["loop"]},
             description=f"Transfer curves plotted for {len(names)} measurements",
         )

@@ -9,7 +9,7 @@ memory_detail:
     description: true
     fields: true
     references: true
-    analysis: true
+    analysis: false
     figures: true
     photos: true
   card_order:

@@ -9,7 +9,7 @@ from typing import Callable
 
 from nicegui import ui
 
-from dashboard.tool_runs import run_tool_on_memory
+from dashboard.tool_runs import apply_tool
 from src.dashboard_tools import get_tool, list_tools
 from src.dashboard_tools.base import ParameterSchema, Tool
 from src.readers.keithley_dean import list_measurements
@@ -56,12 +56,12 @@ def show_tool_dialog(memory_id: int, ref_path: str, project_root: Path,
             tool = get_tool(tool_select.value)
             params = {name: read() for name, read in readers.items()}
             try:
-                analysis_id = run_tool_on_memory(memory_id, ref_path, tool.name, params)
+                apply_tool(memory_id, ref_path, tool.name, params)
             except Exception as exc:
                 ui.notify(f"{tool.display_name} failed: {exc}", color="negative", multi_line=True, timeout=8000)
                 return
             dlg.close()
-            ui.notify(f"{tool.display_name} finished (analysis {analysis_id})", color="positive")
+            ui.notify(f"{tool.display_name} applied", color="positive")
             on_done()
 
         tool_select.on_value_change(lambda _: render_form())

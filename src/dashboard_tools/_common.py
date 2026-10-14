@@ -15,6 +15,22 @@ def safe_stem(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", text).strip("_") or "item"
 
 
+def records_of(df) -> list[dict]:
+    """Turn a DataFrame into JSON-safe row dicts (native scalars, NaN -> None)."""
+    out = []
+    for record in df.to_dict("records"):
+        clean = {}
+        for key, value in record.items():
+            if isinstance(value, float) and value != value:  # NaN
+                clean[key] = None
+            elif hasattr(value, "item"):  # numpy scalar
+                clean[key] = value.item()
+            else:
+                clean[key] = value
+        out.append(clean)
+    return out
+
+
 def resolve_measurements(hdf5_path: Path, requested: list[str], mode: str) -> list[str]:
     """Return the measurements of a given mode, checking any explicit selection.
 

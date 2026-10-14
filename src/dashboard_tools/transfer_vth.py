@@ -6,8 +6,8 @@ import plotly.graph_objects as go
 
 from src.analysis import extract_vth_for_transfers
 
-from ._common import resolve_measurements, stats_of
-from .base import ParameterSchema, Tool, ToolResult
+from ._common import records_of, resolve_measurements, stats_of
+from .base import ParameterSchema, Tool, ToolResult, ToolTable
 
 
 class TransferVthTool(Tool):
@@ -34,7 +34,7 @@ class TransferVthTool(Tool):
         ),
     )
 
-    def run(self, ref_path: Path, params: dict, output_dir: Path) -> ToolResult:
+    def run(self, ref_path: Path, params: dict, workdir: Path) -> ToolResult:
         p = self.coerce(params)
         ref_path = Path(ref_path)
         names = resolve_measurements(ref_path, p["measurements"], "transfer")
@@ -45,11 +45,6 @@ class TransferVthTool(Tool):
         if df.empty:
             raise ValueError("No V_th could be extracted from the selected transfers")
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        table_path = output_dir / f"vth_{ref_path.stem}.csv"
-        df.to_csv(table_path, index=False)
-
-        # Figura plotly interactiva
         fig = go.Figure(go.Bar(
             x=df["measurement"],
             y=df["V_th (V)"],
@@ -72,7 +67,6 @@ class TransferVthTool(Tool):
             xaxis_tickangle=-45,
             height=max(400, 50 * len(df)),
             margin=dict(l=60, r=20, t=60, b=120),
-            hovermode="x unified",
         )
 
         vth_stats = stats_of(df["V_th (V)"].to_numpy())
@@ -89,8 +83,8 @@ class TransferVthTool(Tool):
             f"IQR {vth_stats['iqr']:.3f} V"
         )
         return ToolResult(
-            plotly_figures=[fig],
-            tables=[table_path],
+            figures=[fig],
+            tables=[ToolTable(label="vth_results", records=records_of(df))],
             summary=summary,
             description=description,
         )
