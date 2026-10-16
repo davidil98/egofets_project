@@ -75,7 +75,7 @@ def create_plotly_viewer(figure_spec, max_height: int | None = None):
         return
     try:
         fig = go.Figure(figure_spec)
-        if max_height:
+        if max_height and not fig.layout.height:
             fig.update_layout(height=max_height)
         ui.plotly(fig).classes("w-full")
     except Exception as e:

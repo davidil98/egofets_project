@@ -6,6 +6,7 @@ from typing import Callable
 
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from src.readers.keithley_dean import list_measurements, read_all_curves, _has_hysteresis
 
@@ -171,6 +172,58 @@ def render_plotly_curves(
             fig.update_layout(title=name, height=400)
             figures.append(fig)
     return figures
+
+
+def grid_figure(
+    figures: list[go.Figure],
+    titles: list[str] | None = None,
+    ncols: int = 3,
+    row_height: int = 320,
+    showlegend: bool = False,
+) -> go.Figure:
+    """Merge a list of plotly figures into a single subplot grid.
+
+    Figures with no traces (e.g. an error placeholder) render their annotation
+    text inside the corresponding cell instead of leaving it empty.
+    """
+    n = len(figures)
+    if n == 0:
+        raise ValueError("No figures to combine")
+    ncols = max(1, int(ncols))
+    nrows = (n + ncols - 1) // ncols
+
+    x_title = figures[0].layout.xaxis.title.text or ""
+    y_title = figures[0].layout.yaxis.title.text or ""
+
+    fig = make_subplots(
+        rows=nrows,
+        cols=ncols,
+        subplot_titles=titles or [f"Fig {i + 1}" for i in range(n)],
+        horizontal_spacing=0.06,
+        vertical_spacing=0.06,
+    )
+
+    for i, source in enumerate(figures):
+        row, col = divmod(i, ncols)
+        if source.data:
+            for trace in source.data:
+                fig.add_trace(trace, row=row + 1, col=col + 1)
+        else:
+            text = source.layout.annotations[0].text if source.layout.annotations else "No data"
+            idx = i + 1
+            xref = "x domain" if idx == 1 else f"x{idx} domain"
+            yref = "y domain" if idx == 1 else f"y{idx} domain"
+            fig.add_annotation(text=text, x=0.5, y=0.5, xref=xref, yref=yref,
+                               showarrow=False, font=dict(color="red"))
+
+    fig.update_xaxes(title_text=x_title)
+    fig.update_yaxes(title_text=y_title)
+    fig.update_layout(
+        height=row_height * nrows,
+        showlegend=showlegend,
+        margin=dict(l=60, r=20, t=40, b=40),
+    )
+    return fig
 
 
 def stats_of(values: np.ndarray) -> dict:
