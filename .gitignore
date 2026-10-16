@@ -7,6 +7,9 @@ __pycache__/
 # --- Jupyter ---
 .ipynb_checkpoints/
 
+# --- Generated dashboard caches ---
+data/.thumbnails/
+
 
 
 # Note: __init__.py is intentionally NOT ignored — it is the

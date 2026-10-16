@@ -1,10 +1,15 @@
 """Figure and photo viewer components."""
 
+import hashlib
 from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from nicegui import ui
+from PIL import Image
+
+THUMBNAIL_DIR = Path(__file__).resolve().parents[2] / "data" / ".thumbnails"
 
 
 def create_csv_viewer(csv_path: Path):
@@ -51,14 +56,38 @@ def create_csv_viewer(csv_path: Path):
         ).classes("w-full").props("dense flat")
 
 
-def create_photo_viewer(photo_path: Path):
-    """Render a photo thumbnail with click-to-zoom."""
+def _cached_thumbnail(photo_path: Path, size: int) -> Path | None:
+    """Return a cached, downscaled thumbnail of a photo, or None on failure."""
+    try:
+        stamp = photo_path.stat().st_mtime_ns
+    except OSError:
+        return None
+    key = hashlib.sha1(f"{photo_path}|{stamp}|{size}".encode()).hexdigest()
+    target = THUMBNAIL_DIR / f"{key}.jpg"
+    if target.exists():
+        return target
+    try:
+        THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
+        with Image.open(photo_path) as image:
+            image = image.convert("RGB")
+            image.thumbnail((size, size))
+            image.save(target, "JPEG", quality=85)
+        return target
+    except Exception:
+        return None
+
+
+def create_photo_viewer(photo_path: Path, thumb_size: int = 160):
+    """Render a cached photo thumbnail that opens the full image on click."""
     if not photo_path.exists():
         ui.label(f"Photo not found: {photo_path.name}").classes("text-red-500 text-sm")
         return
 
-    ui.image(photo_path).classes(
-        "w-40 h-40 object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+    source = _cached_thumbnail(photo_path, thumb_size) or photo_path
+    ui.image(source).style(
+        f"width: {thumb_size}px; height: {thumb_size}px"
+    ).classes(
+        "object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
     ).on("click", lambda: _show_photo_zoom(photo_path))
 
 

@@ -31,6 +31,10 @@ def init_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     
     with _conn() as conn:
+        # WAL lets readers and writers coexist and makes small writes much cheaper.
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+
         # Create tables
         for table_name, table_def in schema["tables"].items():
             columns = []
@@ -118,29 +122,38 @@ def create_memory(
         return memory_id
 
 
-def get_memory(memory_id: int) -> Optional[dict]:
-    """Get memory by ID with all related data."""
+def get_memory(
+    memory_id: int,
+    with_runs: bool = True,
+    with_items: bool = True,
+) -> Optional[dict]:
+    """Get memory by ID with its related data.
+
+    ``with_runs=False`` skips tool runs entirely (used for light edits that touch
+    no run-dependent card). ``with_items=False`` loads the runs but not their
+    (potentially large) figure/table payloads.
+    """
     with _conn() as conn:
         row = conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
         if not row:
             return None
-        
+
         memory = dict(row)
-        
+
         # Load fields
         memory["fields"] = [
             dict(r) for r in conn.execute(
                 "SELECT * FROM memory_fields WHERE memory_id = ?", (memory_id,)
             ).fetchall()
         ]
-        
+
         # Load references
         memory["references"] = [
             dict(r) for r in conn.execute(
                 "SELECT * FROM memory_references WHERE memory_id = ?", (memory_id,)
             ).fetchall()
         ]
-        
+
         # Load analysis results
         memory["analysis_results"] = [
             dict(r) for r in conn.execute(
@@ -148,16 +161,43 @@ def get_memory(memory_id: int) -> Optional[dict]:
             ).fetchall()
         ]
 
-        # Load tool runs (with their items)
-        run_rows = conn.execute(
-            "SELECT * FROM tool_runs WHERE memory_id = ? ORDER BY created_at DESC, id DESC",
-            (memory_id,),
-        ).fetchall()
-        memory["tool_runs"] = [
-            _with_items(conn, dict(row)) for row in run_rows
-        ]
+        # Load tool runs (with their items) in a single round-trip
+        memory["tool_runs"] = (
+            _load_runs_with_items(conn, memory_id, with_items=with_items)
+            if with_runs
+            else []
+        )
 
         return memory
+
+
+def _load_runs_with_items(conn, memory_id: int, with_items: bool = True) -> list[dict]:
+    """Load a memory's tool runs and attach their items without an N+1 query."""
+    rows = conn.execute(
+        "SELECT * FROM tool_runs WHERE memory_id = ? ORDER BY created_at DESC, id DESC",
+        (memory_id,),
+    ).fetchall()
+    runs = [dict(row) for row in rows]
+    for run in runs:
+        run["items"] = []
+    if not runs or not with_items:
+        return runs
+
+    ids = [run["id"] for run in runs]
+    placeholders = ", ".join("?" for _ in ids)
+    item_rows = conn.execute(
+        f"""SELECT * FROM tool_run_items WHERE run_id IN ({placeholders})
+            ORDER BY position, id""",
+        ids,
+    ).fetchall()
+
+    by_run: dict[int, list[dict]] = {}
+    for item in item_rows:
+        record = dict(item)
+        by_run.setdefault(record["run_id"], []).append(record)
+    for run in runs:
+        run["items"] = by_run.get(run["id"], [])
+    return runs
 
 
 def list_memories(
@@ -350,17 +390,31 @@ def list_tool_runs(memory_id: int, ref_path: str = None) -> list[dict]:
     """List tool runs of a memory, optionally filtered by source reference."""
     with _conn() as conn:
         if ref_path is None:
-            rows = conn.execute(
-                "SELECT * FROM tool_runs WHERE memory_id = ? ORDER BY created_at DESC, id DESC",
-                (memory_id,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """SELECT * FROM tool_runs WHERE memory_id = ? AND ref_path = ?
-                   ORDER BY created_at DESC, id DESC""",
-                (memory_id, ref_path),
-            ).fetchall()
-        return [_with_items(conn, dict(r)) for r in rows]
+            return _load_runs_with_items(conn, memory_id)
+        rows = conn.execute(
+            """SELECT * FROM tool_runs WHERE memory_id = ? AND ref_path = ?
+               ORDER BY created_at DESC, id DESC""",
+            (memory_id, ref_path),
+        ).fetchall()
+        runs = [dict(r) for r in rows]
+        for run in runs:
+            run["items"] = []
+        if not runs:
+            return runs
+        ids = [run["id"] for run in runs]
+        placeholders = ", ".join("?" for _ in ids)
+        item_rows = conn.execute(
+            f"""SELECT * FROM tool_run_items WHERE run_id IN ({placeholders})
+                ORDER BY position, id""",
+            ids,
+        ).fetchall()
+        by_run: dict[int, list[dict]] = {}
+        for item in item_rows:
+            record = dict(item)
+            by_run.setdefault(record["run_id"], []).append(record)
+        for run in runs:
+            run["items"] = by_run.get(run["id"], [])
+        return runs
 
 
 def delete_tool_run(run_id: int):

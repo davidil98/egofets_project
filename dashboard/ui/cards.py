@@ -131,16 +131,26 @@ def _group_references(references: list[dict]) -> dict[str, list[dict]]:
 
 
 class SectionCard(ui.card):
-    """Base class for a single memory detail section."""
+    """Base class for a single memory detail section.
+
+    Each card owns a refreshable body, so a mutation reloads only the cards that
+    actually depend on the data that changed (see ``change_event`` / ``emit``).
+    """
+
+    #: Event emitted by ``notify_changed``; the owner maps it to the cards to reload.
+    change_event: str = "memory"
+    #: Whether the rendered body differs between view and edit mode.
+    depends_on_editing: bool = True
 
     def __init__(self, *, key: str, memory: dict, project_root: Path,
                  editing: bool, conf: dict, height: int | None = None,
                  on_close: Callable[[str], None] | None = None,
-                 on_changed: Callable[[], None] | None = None) -> None:
+                 on_changed: Callable[[str], None] | None = None) -> None:
         """Build the card shell and render its content."""
         super().__init__()
         self.key = key
         self.memory = memory or {}
+        self.memory_id = self.memory.get("id")
         self.project_root = Path(project_root)
         self.editing = bool(editing)
         self.conf = conf or {}
@@ -156,7 +166,22 @@ class SectionCard(ui.card):
             self.header()
             with ui.card_section().classes("w-full p-4"):
                 with ui.column().classes("w-full gap-3 items-stretch"):
-                    self.content()
+                    self._render_body()
+
+    @ui.refreshable_method
+    def _render_body(self) -> None:
+        """Render (or re-render) the card body in place."""
+        self.content()
+
+    def reload(self, memory: dict | None = None) -> None:
+        """Refresh only this card, optionally with freshly loaded memory data."""
+        if memory is not None:
+            self.memory = memory
+        self._render_body.refresh()
+
+    def set_editing(self, editing: bool) -> None:
+        """Switch the card between view and edit mode."""
+        self.editing = bool(editing)
 
     def header(self) -> None:
         """Render icon, title and the fullscreen/close controls."""
@@ -186,10 +211,14 @@ class SectionCard(ui.card):
             else {{ document.exitFullscreen(); }}
         """)
 
-    def notify_changed(self) -> None:
-        """Forward a change event to the owner of the card."""
+    def emit(self, event: str) -> None:
+        """Ask the owner of the card to reload the cards affected by `event`."""
         if self.on_changed is not None:
-            self.on_changed()
+            self.on_changed(event)
+
+    def notify_changed(self) -> None:
+        """Emit this card's default change event to the owner."""
+        self.emit(self.change_event)
 
     def save_button(self, handler: Callable[[], None], label: str = "Save") -> None:
         """Render the primary action button used by the editable cards."""
@@ -199,6 +228,8 @@ class SectionCard(ui.card):
 
 class MetadataCard(SectionCard):
     """Title, date, substrate and process of a memory."""
+
+    change_event = "metadata"
 
     def content(self) -> None:
         """Render the metadata block."""
@@ -236,6 +267,8 @@ class MetadataCard(SectionCard):
 class DescriptionCard(SectionCard):
     """Free text description of a memory."""
 
+    change_event = "description"
+
     def content(self) -> None:
         """Render the description block."""
         description = self.memory.get("description") or ""
@@ -259,6 +292,8 @@ class DescriptionCard(SectionCard):
 
 class FieldsCard(SectionCard):
     """All the fields of a memory, as a table or as editable rows."""
+
+    change_event = "fields"
 
     def fields(self) -> list[dict]:
         """Return every field of the memory."""
@@ -292,8 +327,14 @@ class FieldsCard(SectionCard):
                 ui.button(icon="delete", on_click=lambda _, f=field: self.delete_field(f)).props(
                     "flat dense color=negative size=sm"
                 )
-                name_input.on_value_change(lambda e, f=field: db.update_field(f["id"], field_name=e.value))
-                value_input.on_value_change(lambda e, f=field: db.update_field(f["id"], field_value=e.value))
+
+                def save_field(e=None, f=field, name_w=name_input, value_w=value_input) -> None:
+                    db.update_field(f["id"], field_name=name_w.value or "", field_value=value_w.value or "")
+
+                name_input.on("blur", save_field)
+                value_input.on("blur", save_field)
+                name_input.on("keydown.enter", save_field)
+                value_input.on("keydown.enter", save_field)
 
         with ui.row().classes("w-full items-center gap-2"):
             new_name = ui.input("Name").props("dense outlined").classes("flex-1")
@@ -321,6 +362,12 @@ class FieldsCard(SectionCard):
 
 class ReferencesCard(SectionCard):
     """Attached files grouped by type, with the tools that can run on them."""
+
+    change_event = "references"
+
+    def _runs_changed(self) -> None:
+        """Signal that tool runs changed (affects References, Analysis, Figures)."""
+        self.emit("runs")
 
     def content(self) -> None:
         """Render the reference groups, the tools applied to each and the add-files row."""
@@ -387,7 +434,7 @@ class ReferencesCard(SectionCard):
             ui.button(icon="replay", on_click=lambda _, r=run: self._rerun(r)).props(
                 "flat dense color=primary size=sm"
             ).tooltip("Re-run with the same parameters")
-            ui.button(icon="delete", on_click=lambda _, r=run: _confirm_remove_run(r, self.notify_changed)).props(
+            ui.button(icon="delete", on_click=lambda _, r=run: _confirm_remove_run(r, self._runs_changed)).props(
                 "flat dense color=negative size=sm"
             ).tooltip("Remove this tool and everything it produced")
 
@@ -402,11 +449,11 @@ class ReferencesCard(SectionCard):
             ui.notify("That run was already gone", color="warning")
         else:
             ui.notify(f"Re-ran {run.get('tool_name', 'tool')}", color="positive")
-        self.notify_changed()
+        self._runs_changed()
 
     def apply_tool(self, ref_path: str) -> None:
         """Open the Apply tool dialog for an HDF5 reference."""
-        show_tool_dialog(self.memory["id"], ref_path, self.project_root, on_done=self.notify_changed)
+        show_tool_dialog(self.memory["id"], ref_path, self.project_root, on_done=self._runs_changed)
 
     def delete_reference(self, reference: dict) -> None:
         """Remove a reference and refresh the view."""
@@ -438,6 +485,8 @@ class ReferencesCard(SectionCard):
 
 class AnalysisCard(SectionCard):
     """Applied tools: parameters, summary and data tables of each run."""
+
+    depends_on_editing = False
 
     def content(self) -> None:
         """Render one expansion per applied tool."""
@@ -496,6 +545,8 @@ def _format(value) -> str:
 
 class FiguresCard(SectionCard):
     """Interactive figures produced by the applied tools."""
+
+    depends_on_editing = False
 
     def content(self) -> None:
         """Render the figures of every applied tool, plus legacy CSV charts."""
@@ -558,6 +609,8 @@ def _confirm_remove_run(run: dict, on_done: Callable[[], None]) -> None:
 class PhotosCard(SectionCard):
     """Photo gallery grouped by titled, collapsible sections."""
 
+    depends_on_editing = False
+
     def content(self) -> None:
         """Render photos grouped by their section, each under a titled separator."""
         photo_refs = [r for r in self.memory.get("references", []) if r.get("ref_type") == "photo"]
@@ -565,7 +618,9 @@ class PhotosCard(SectionCard):
             _empty_hint("No photo references")
             return
 
-        columns = (self.conf.get("photos") or {}).get("columns", 4) or 4
+        photos_conf = self.conf.get("photos") or {}
+        columns = photos_conf.get("columns", 4) or 4
+        thumb_size = photos_conf.get("thumb_size", 160) or 160
 
         groups: dict[str, list[dict]] = {}
         for reference in photo_refs:
@@ -577,7 +632,9 @@ class PhotosCard(SectionCard):
             with ui.expansion(f"{title} ({len(refs)})", value=True, icon="photo_library").classes("w-full"):
                 with ui.grid(columns=columns).classes("w-full gap-2 justify-items-center"):
                     for reference in refs:
-                        create_photo_viewer(self.project_root / reference.get("ref_path", ""))
+                        create_photo_viewer(
+                            self.project_root / reference.get("ref_path", ""), thumb_size
+                        )
 
 
 SECTION_CARDS: dict[str, type[SectionCard]] = {
@@ -589,6 +646,9 @@ SECTION_CARDS: dict[str, type[SectionCard]] = {
     "figures": FiguresCard,
     "photos": PhotosCard,
 }
+
+#: Cards whose content is built from tool runs (they need ``with_runs=True``).
+RUN_DEPENDENT_KEYS: frozenset[str] = frozenset({"references", "analysis", "figures"})
 
 
 class CardContainer(ui.grid):
@@ -621,28 +681,46 @@ class CardContainer(ui.grid):
         return list(self._cards)
 
 
+def build_section_card(*, container: CardContainer, key: str, memory: dict,
+                       project_root: Path, editing: bool, conf: dict,
+                       on_close: Callable[[str], None] | None = None,
+                       on_changed: Callable[[str], None] | None = None) -> SectionCard | None:
+    """Instantiate one section card inside `container` and register it."""
+    card_class = SECTION_CARDS.get(key)
+    if card_class is None:
+        return None
+    height = conf.get("card_height")
+    with container:
+        card = card_class(
+            key=key,
+            memory=memory,
+            project_root=project_root,
+            editing=editing,
+            conf=conf,
+            height=height,
+            on_close=on_close,
+            on_changed=on_changed,
+        )
+    container.add(key, card)
+    return card
+
+
 def build_section_cards(*, container: CardContainer, memory: dict,
                         project_root: Path, editing: bool, conf: dict,
                         visible: dict[str, bool], order: list[str],
                         on_close: Callable[[str], None] | None = None,
-                        on_changed: Callable[[], None] | None = None) -> None:
+                        on_changed: Callable[[str], None] | None = None) -> None:
     """Instantiate the visible section cards inside `container`, following `order`."""
-    height = conf.get("card_height")
     for key in order:
         if not visible.get(key):
             continue
-        card_class = SECTION_CARDS.get(key)
-        if card_class is None:
-            continue
-        with container:
-            card = card_class(
-                key=key,
-                memory=memory,
-                project_root=project_root,
-                editing=editing,
-                conf=conf,
-                height=height,
-                on_close=on_close,
-                on_changed=on_changed,
-            )
-        container.add(key, card)
+        build_section_card(
+            container=container,
+            key=key,
+            memory=memory,
+            project_root=project_root,
+            editing=editing,
+            conf=conf,
+            on_close=on_close,
+            on_changed=on_changed,
+        )

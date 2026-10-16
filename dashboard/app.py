@@ -19,6 +19,9 @@ def _init():
     db.init_db()
 
 
+app.on_startup(_init)
+
+
 class AppState:
     current_view: str = "home"
     selected_memory_id: int | None = None
@@ -30,7 +33,6 @@ state = AppState()
 
 @ui.page("/")
 def main_page():
-    _init()
     _build_layout()
 
 
